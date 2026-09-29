@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">Fake GPS</string>
+    <string name="permission_title">Нужен доступ к геолокации</string>
+    <string name="permission_message">Карта откроется только после разрешения. Без него нельзя выбрать точку и подменять GPS.</string>
+    <string name="permission_grant">Разрешить</string>
+    <string name="permission_settings">Открыть настройки</string>
+    <string name="permission_denied">Без доступа к геолокации карта недоступна</string>
+    <string name="map_hint">Нажмите на карту, чтобы выбрать фиктивную точку</string>
+    <string name="coordinates_format">%1$.6f, %2$.6f</string>
+    <string name="selected_point">Выбранная точка</string>
+    <string name="status_stopped">Статус: GPS не подменяется</string>
+    <string name="status_running">Статус: фиктивные координаты отдаются</string>
+    <string name="start_mock_location">Старт</string>
+    <string name="stop_mock_location">Стоп</string>
+    <string name="point_required">Сначала выберите точку на карте</string>
+    <string name="mock_app_title">Выберите Fake GPS для фиктивных координат</string>
+    <string name="mock_app_message">Это приложение для режима разработчика.
+
+Настройки → Для разработчиков → Выбрать приложение для фиктивных местоположений → Fake GPS</string>
+    <string name="mock_app_open">Открыть настройки разработчика</string>
+    <string name="mock_app_check">Проверить снова</string>
+    <string name="mock_app_close">Закрыть</string>
+    <string name="mock_app_blocked">Карта закрыта, пока Fake GPS не выбран для фиктивных местоположений</string>
+    <string name="mock_app_open_failed">Включите сначала режим разработчика</string>
+    <string name="notification_channel">Фиктивный GPS</string>
+    <string name="notification_title">Fake GPS работает</string>
+</resources>

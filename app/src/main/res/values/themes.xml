@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GPS" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/gps_green</item>
+        <item name="colorPrimaryDark">@color/gps_green_dark</item>
+        <item name="colorAccent">@color/gps_green</item>
+        <item name="android:statusBarColor">@color/status_bar</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/permission_bg</item>
+    </style>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="permission_bg">#FFF3F6F4</color>
+    <color name="text_primary">#FF12221A</color>
+    <color name="text_secondary">#FF5C6B64</color>
+    <color name="gps_green">#FF0F7B4C</color>
+    <color name="gps_green_dark">#FF0B5C39</color>
+    <color name="panel">#F7FFFFFF</color>
+    <color name="pin">#FFE53935</color>
+    <color name="status_bar">#FFF3F6F4</color>
+</resources>
