@@ -3,6 +3,9 @@
     <string name="app_icon">Fake GPS icon</string>
     <string name="change_theme">Change theme</string>
     <string name="change_language">Change language</string>
+    <string name="map_layers">Map layers</string>
+    <string name="map_provider_open_street_map">OpenStreetMap — standard</string>
+    <string name="map_provider_esri_dark_gray">Esri — Dark Gray</string>
     <string name="back">Go back</string>
     <string name="permission_title">Location access is required</string>
     <string name="permission_message">The map opens after location access is granted. Without it, you cannot choose a point or spoof GPS.</string>
@@ -15,6 +18,8 @@
     <string name="address_not_found">Address could not be determined</string>
     <string name="coordinates_format">%1$.6f, %2$.6f</string>
     <string name="coordinates_none">No location selected</string>
+    <string name="map_attribution_osm">© OpenStreetMap contributors</string>
+    <string name="map_attribution_esri">© Esri, HERE, Garmin · © OpenStreetMap contributors</string>
     <string name="disable_mock_location">Disable fake GPS</string>
     <string name="selected_point">Selected location</string>
     <string name="status_stopped">Status: GPS is not spoofed</string>

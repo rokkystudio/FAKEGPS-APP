@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.icu.util.ULocale
 import android.location.Address
@@ -15,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -29,6 +31,7 @@ import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
@@ -67,24 +70,44 @@ class MainActivity : ThemedActivity()
         Map
     }
 
+    /** Доступные источники подложки карты. */
+    private enum class MapProvider {
+        /** Стандартная подробная карта OpenStreetMap. */
+        OpenStreetMap,
+
+        /** Тёмная подложка Esri World Dark Gray Canvas. */
+        EsriDarkGray
+    }
+
     /** Константы, общие для логики главного экрана. */
     private companion object {
         /** Начальный масштаб карты. */
         const val DEFAULT_ZOOM = 14.0
 
-        /** Тёмный источник растровых тайлов Carto Dark Matter для ночной темы. */
-        val DARK_TILE_SOURCE = XYTileSource(
-            "Carto Dark Matter",
+        /**
+         * Тёмный источник растровых тайлов Esri World Dark Gray Canvas.
+         *
+         * Сервис не требует ключа API. В REST-адресе Esri порядок координат —
+         * «масштаб/строка/столбец», поэтому [getTileURLString] меняет местами координаты XYZ.
+         */
+        val ESRI_DARK_TILE_SOURCE = object : XYTileSource(
+            "Esri World Dark Gray Canvas",
             0,
-            20,
+            23,
             256,
             ".png",
-            arrayOf(
-                "https://a.basemaps.cartocdn.com/dark_all/",
-                "https://b.basemaps.cartocdn.com/dark_all/",
-                "https://c.basemaps.cartocdn.com/dark_all/"
-            )
-        )
+            arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/")
+        ) {
+            override fun getTileURLString(pMapTileIndex: Long): String =
+                "${getBaseUrl()}${MapTileIndex.getZoom(pMapTileIndex)}/" +
+                    "${MapTileIndex.getY(pMapTileIndex)}/${MapTileIndex.getX(pMapTileIndex)}"
+        }
+
+        /** Имя настроек выбора источника карты. */
+        const val PREFS_MAP = "fake_gps_map"
+
+        /** Ключ выбранного источника карты. */
+        const val KEY_MAP_PROVIDER = "map_provider"
 
         /** Разрешения точного и приблизительного доступа к геолокации. */
         val LOCATION_PERMISSIONS = arrayOf(
@@ -101,6 +124,9 @@ class MainActivity : ThemedActivity()
 
     /** Привязка экрана карты или `null`, пока карта не создана. */
     private var mapBinding: ActivityMapBinding? = null
+
+    /** Выбранный пользователем источник подложки карты. */
+    private var mapProvider = MapProvider.OpenStreetMap
 
     /** Маркер выбранной точки; создаётся лениво при первом выборе координат. */
     private var pin: Marker? = null
@@ -306,6 +332,7 @@ class MainActivity : ThemedActivity()
         binding.grant.setText(R.string.permission_grant)
         binding.settings.setText(R.string.permission_settings)
         setupTopBar(binding.topBar, getString(R.string.app_name))
+        binding.topBar.mapLayersButton.visibility = View.GONE
         binding.grant.setOnClickListener {
             permissionLauncher.launch(LOCATION_PERMISSIONS)
         }
@@ -350,6 +377,8 @@ class MainActivity : ThemedActivity()
         mapBinding = binding
         setContentView(binding.root)
         setupTopBar(binding.topBar, getString(R.string.app_name))
+        binding.topBar.mapLayersButton.visibility = View.VISIBLE
+        binding.topBar.mapLayersButton.setOnClickListener { showMapLayersMenu(binding) }
         setupMap(binding)
         binding.map.onResume()
         currentScreen = Screen.Map
@@ -363,7 +392,8 @@ class MainActivity : ThemedActivity()
     private fun setupMap(binding: ActivityMapBinding)
     {
         val map = binding.map
-        map.setTileSource(if (isDarkTheme()) DARK_TILE_SOURCE else TileSourceFactory.MAPNIK)
+        mapProvider = savedMapProvider()
+        applyMapProvider(binding)
         map.setMultiTouchControls(true)
         map.minZoomLevel = 3.0
         map.maxZoomLevel = 20.0
@@ -401,6 +431,93 @@ class MainActivity : ThemedActivity()
             MockLocationService.start(this)
         }
         syncMockState()
+    }
+
+    /**
+     * Показывает меню выбора источника карты возле кнопки слоёв.
+     *
+     * Активный источник отмечается стандартной радиокнопкой. Выбор сохраняется сразу и
+     * применяется без пересоздания Activity, поэтому выбранная точка и масштаб карты не теряются.
+     *
+     * @param binding привязка активного экрана карты.
+     */
+    private fun showMapLayersMenu(binding: ActivityMapBinding) {
+        PopupMenu(this, binding.topBar.mapLayersButton).apply {
+            menuInflater.inflate(R.menu.map_layers, menu)
+            menu.findItem(mapProvider.menuItemId()).isChecked = true
+            setOnMenuItemClickListener { item ->
+                val provider = mapProviderFromMenuItemId(item.itemId)
+                    ?: return@setOnMenuItemClickListener false
+                selectMapProvider(binding, provider)
+                true
+            }
+            show()
+        }
+    }
+
+    /**
+     * Сохраняет выбранный источник и перерисовывает карту с его тайлами.
+     *
+     * @param binding привязка активного экрана карты.
+     * @param provider источник, выбранный в меню слоёв.
+     */
+    private fun selectMapProvider(binding: ActivityMapBinding, provider: MapProvider) {
+        if (mapProvider == provider) {
+            return
+        }
+
+        mapProvider = provider
+        getSharedPreferences(PREFS_MAP, MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_PROVIDER, provider.name)
+            .apply()
+        applyMapProvider(binding)
+    }
+
+    /**
+     * Устанавливает сохранённый источник тайлов и его обязательную атрибуцию.
+     *
+     * Цветовая тема приложения намеренно не участвует в выборе: карту меняет только меню слоёв.
+     *
+     * @param binding привязка активного экрана карты.
+     */
+    private fun applyMapProvider(binding: ActivityMapBinding) {
+        val map = binding.map
+        val tileSource = when (mapProvider) {
+            MapProvider.OpenStreetMap -> TileSourceFactory.MAPNIK
+            MapProvider.EsriDarkGray -> ESRI_DARK_TILE_SOURCE
+        }
+        val attribution = when (mapProvider) {
+            MapProvider.OpenStreetMap -> R.string.map_attribution_osm
+            MapProvider.EsriDarkGray -> R.string.map_attribution_esri
+        }
+
+        map.setTileSource(tileSource)
+        map.overlayManager.tilesOverlay.setColorFilter(null)
+        map.overlayManager.tilesOverlay.setLoadingBackgroundColor(Color.rgb(216, 208, 208))
+        map.overlayManager.tilesOverlay.setLoadingLineColor(Color.rgb(200, 192, 192))
+        binding.mapAttribution.setText(attribution)
+        map.invalidate()
+    }
+
+    /** @return источник карты, сохранённый между запусками приложения. */
+    private fun savedMapProvider(): MapProvider {
+        val name = getSharedPreferences(PREFS_MAP, MODE_PRIVATE)
+            .getString(KEY_MAP_PROVIDER, null)
+        return MapProvider.entries.firstOrNull { it.name == name } ?: MapProvider.OpenStreetMap
+    }
+
+    /** @return идентификатор пункта меню для текущего источника. */
+    private fun MapProvider.menuItemId(): Int = when (this) {
+        MapProvider.OpenStreetMap -> R.id.map_provider_open_street_map
+        MapProvider.EsriDarkGray -> R.id.map_provider_esri_dark_gray
+    }
+
+    /** Преобразует идентификатор пункта меню в источник карты. */
+    private fun mapProviderFromMenuItemId(itemId: Int): MapProvider? = when (itemId) {
+        R.id.map_provider_open_street_map -> MapProvider.OpenStreetMap
+        R.id.map_provider_esri_dark_gray -> MapProvider.EsriDarkGray
+        else -> null
     }
 
     /**

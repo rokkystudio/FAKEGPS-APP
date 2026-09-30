@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Временная иконка слоёв: замените этот drawable готовым изображением без смены разметки. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M12,2L2,7l10,5l10,-5L12,2z" />
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M4,10.5L12,14.5l8,-4v2L12,16.5l-8,-4v-2z" />
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M4,15L12,19l8,-4v2L12,21l-8,-4v-2z" />
+</vector>

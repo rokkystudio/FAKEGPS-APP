@@ -45,13 +45,27 @@
         android:textStyle="bold" />
 
     <ImageButton
+        android:id="@+id/mapLayersButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/bg_title_bar_button"
+        android:backgroundTint="@null"
+        android:contentDescription="@string/map_layers"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/map2"
+        android:stateListAnimator="@null" />
+
+    <ImageButton
         android:id="@+id/themeToggleButton"
         android:layout_width="48dp"
         android:layout_height="48dp"
+        android:layout_marginStart="4dp"
         android:background="@drawable/bg_title_bar_button"
         android:backgroundTint="@null"
         android:contentDescription="@string/change_theme"
-        android:padding="11dp"
+        android:padding="10dp"
         android:scaleType="fitCenter"
         android:stateListAnimator="@null"
         android:src="@drawable/theme_sun" />
@@ -60,11 +74,11 @@
         android:id="@+id/languageFlag"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="4dp"
         android:background="@drawable/bg_title_bar_button"
         android:backgroundTint="@null"
         android:contentDescription="@string/change_language"
-        android:padding="8dp"
+        android:padding="10dp"
         android:scaleType="fitCenter"
         android:stateListAnimator="@null"
         android:src="@drawable/flag_us" />

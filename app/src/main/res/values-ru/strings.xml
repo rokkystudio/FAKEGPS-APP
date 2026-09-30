@@ -3,6 +3,9 @@
     <string name="app_icon">Иконка Fake GPS</string>
     <string name="change_theme">Сменить тему</string>
     <string name="change_language">Сменить язык</string>
+    <string name="map_layers">Слои карты</string>
+    <string name="map_provider_open_street_map">OpenStreetMap — стандартная</string>
+    <string name="map_provider_esri_dark_gray">Esri — тёмная карта</string>
     <string name="back">Назад</string>
     <string name="permission_title">Нужен доступ к геолокации</string>
     <string name="permission_message">Карта откроется только после разрешения. Без него нельзя выбрать точку и подменять GPS.</string>
@@ -15,6 +18,8 @@
     <string name="address_not_found">Не удалось определить адрес</string>
     <string name="coordinates_format">%1$.6f, %2$.6f</string>
     <string name="coordinates_none">Точка не выбрана</string>
+    <string name="map_attribution_osm">© Участники OpenStreetMap</string>
+    <string name="map_attribution_esri">© Esri, HERE, Garmin · © Участники OpenStreetMap</string>
     <string name="disable_mock_location">Отключить фиктивный GPS</string>
     <string name="selected_point">Выбранная точка</string>
     <string name="status_stopped">Статус: GPS не подменяется</string>
