@@ -6,7 +6,13 @@
     <string name="permission_settings">Открыть настройки</string>
     <string name="permission_denied">Без доступа к геолокации карта недоступна</string>
     <string name="map_hint">Нажмите на карту, чтобы выбрать фиктивную точку</string>
+    <string name="map_hint_selected">Выбрано местоположение для фиктивного GPS</string>
+    <string name="address_loading">Определяем полный адрес…</string>
     <string name="coordinates_format">%1$.6f, %2$.6f</string>
+    <string name="coordinates_with_place">%1$s
+%2$s</string>
+    <string name="coordinates_none">Точка не выбрана</string>
+    <string name="disable_mock_location">Отключить фиктивный GPS</string>
     <string name="selected_point">Выбранная точка</string>
     <string name="status_stopped">Статус: GPS не подменяется</string>
     <string name="status_running">Статус: фиктивные координаты отдаются</string>

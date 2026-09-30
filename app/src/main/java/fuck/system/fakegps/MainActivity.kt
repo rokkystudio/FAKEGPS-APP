@@ -6,10 +6,14 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
+import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -26,6 +30,8 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import java.io.File
+import java.util.Locale
+import java.util.concurrent.Executors
 
 /**
  * Blocks the map until location permission is granted. A tap on the map immediately sets the mock
@@ -38,6 +44,9 @@ class MainActivity : AppCompatActivity() {
     private var gateBinding: ActivityMainBinding? = null
     private var mapBinding: ActivityMapBinding? = null
     private var pin: Marker? = null
+    private val geocoderExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var geocodeRequestId = 0L
     private var currentScreen: Screen? = null
     private var notificationPermissionAsked = false
     private var selectedPoint = GeoPoint(
@@ -86,6 +95,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         mockAppDialog?.dismiss()
         mockAppDialog = null
+        geocodeRequestId++
+        geocoderExecutor.shutdownNow()
         mapBinding?.map?.onDetach()
         super.onDestroy()
     }
@@ -285,9 +296,10 @@ class MainActivity : AppCompatActivity() {
         } else {
             removePin()
             binding.coordinates.setText(R.string.coordinates_none)
+            binding.mapHint.setText(R.string.map_hint)
         }
-        binding.status.setText(if (running) R.string.status_running else R.string.status_stopped)
         binding.disable.isEnabled = running
+        binding.disable.visibility = if (running) View.VISIBLE else View.GONE
     }
 
     private fun showPin(point: GeoPoint) {
@@ -298,10 +310,13 @@ class MainActivity : AppCompatActivity() {
         }
         marker.position = point
         map.invalidate()
-        updateCoordinates(point)
+        mapBinding?.coordinates?.setText(R.string.address_loading)
+        requestPlaceName(point)
+        mapBinding?.mapHint?.setText(R.string.map_hint_selected)
     }
 
     private fun removePin() {
+        geocodeRequestId++
         val marker = pin ?: return
         mapBinding?.map?.let {
             it.overlays.remove(marker)
@@ -337,6 +352,61 @@ class MainActivity : AppCompatActivity() {
             point.latitude,
             point.longitude
         )
+    }
+
+    private fun requestPlaceName(point: GeoPoint) {
+        val requestId = ++geocodeRequestId
+        if (!Geocoder.isPresent()) {
+            updateCoordinates(point)
+            return
+        }
+
+        geocoderExecutor.execute {
+            val fullAddress = try {
+                @Suppress("DEPRECATION")
+                Geocoder(this, Locale.getDefault())
+                    .getFromLocation(point.latitude, point.longitude, 1)
+                    ?.firstOrNull()
+                    ?.let { address ->
+                        val lines = if (address.maxAddressLineIndex >= 0) {
+                            (0..address.maxAddressLineIndex)
+                                .mapNotNull { index -> address.getAddressLine(index)?.trim() }
+                                .filter { it.isNotEmpty() }
+                                .distinct()
+                        } else {
+                            emptyList()
+                        }
+                        val fallback = listOfNotNull(
+                            address.featureName,
+                            address.thoroughfare,
+                            address.subThoroughfare,
+                            address.locality,
+                            address.subAdminArea,
+                            address.adminArea,
+                            address.countryName
+                        ).distinct()
+                        val addressParts = if (lines.isNotEmpty()) lines else fallback
+                        addressParts.joinToString(", ").takeIf { it.isNotEmpty() }
+                    }
+            } catch (_: Exception) {
+                null
+            }
+
+            mainHandler.post {
+                if (requestId != geocodeRequestId || mapBinding == null) {
+                    return@post
+                }
+
+                val coordinates = getString(
+                    R.string.coordinates_format,
+                    point.latitude,
+                    point.longitude
+                )
+                mapBinding?.coordinates?.text = fullAddress?.let {
+                    getString(R.string.coordinates_with_place, it, coordinates)
+                } ?: coordinates
+            }
+        }
     }
 
     private fun configureOsmDroid() {

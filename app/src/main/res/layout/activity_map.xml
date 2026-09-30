@@ -23,6 +23,7 @@
         android:padding="16dp">
 
         <TextView
+            android:id="@+id/map_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/map_hint"
@@ -40,15 +41,6 @@
             android:textStyle="bold"
             tools:text="55.755800, 37.617300" />
 
-        <TextView
-            android:id="@+id/status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/status_stopped"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
-
         <Button
             android:id="@+id/disable"
             android:layout_width="match_parent"
@@ -58,7 +50,8 @@
             android:enabled="false"
             android:text="@string/disable_mock_location"
             android:textAllCaps="false"
-            android:textColor="@color/white" />
+            android:textColor="@color/white"
+            android:visibility="gone" />
     </LinearLayout>
 
 </FrameLayout>
