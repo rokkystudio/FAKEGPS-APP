@@ -1,57 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/background"
+    android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <org.osmdroid.views.MapView
-        android:id="@+id/map"
+    <include
+        android:id="@+id/topBar"
+        layout="@layout/top_bar" />
+
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clickable="true"
-        android:focusable="true" />
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_margin="12dp"
-        android:background="@drawable/bg_panel"
-        android:elevation="8dp"
-        android:orientation="vertical"
-        android:padding="16dp">
+        <org.osmdroid.views.MapView
+            android:id="@+id/map"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true" />
 
-        <TextView
-            android:id="@+id/map_hint"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/map_hint"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
+            android:layout_gravity="bottom"
+            android:layout_margin="12dp"
+            android:background="@drawable/bg_card"
+            android:elevation="8dp"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-        <TextView
-            android:id="@+id/coordinates"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:fontFamily="monospace"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            tools:text="55.755800, 37.617300" />
+            <TextView
+                android:id="@+id/map_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:text="@string/map_hint"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
 
-        <Button
-            android:id="@+id/disable"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="@color/text_secondary"
-            android:enabled="false"
-            android:text="@string/disable_mock_location"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:visibility="gone" />
-    </LinearLayout>
+            <TextView
+                android:id="@+id/address"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:breakStrategy="high_quality"
+                android:hyphenationFrequency="full"
+                android:includeFontPadding="false"
+                android:lineSpacingExtra="2dp"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:visibility="gone"
+                tools:text="ул. Октябрьская, 136, Бобруйск, Беларусь" />
 
-</FrameLayout>
+            <TextView
+                android:id="@+id/coordinates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:fontFamily="monospace"
+                android:includeFontPadding="false"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                tools:text="55.755800, 37.617300" />
+
+            <Button
+                android:id="@+id/disable"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_button"
+                android:enabled="false"
+                android:minHeight="48dp"
+                android:text="@string/disable_mock_location"
+                android:textAllCaps="false"
+                android:textColor="@color/accent"
+                android:visibility="gone" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

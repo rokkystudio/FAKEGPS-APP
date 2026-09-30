@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="background">#FF111418</color>
+    <color name="surface">#FF222732</color>
+    <color name="surface_raised">#FF1D232A</color>
+    <color name="title_bar">#FF252D36</color>
+    <color name="border">#FF2A323B</color>
+    <color name="border_strong">#FF34404B</color>
+    <color name="text_primary">#FFF2F5F8</color>
+    <color name="text_secondary">#FFAEB2B6</color>
+    <color name="accent">#FF69AFED</color>
+    <color name="title_bar_button_pressed">#FF283F4D</color>
+    <color name="button_pressed">#FF1D232A</color>
+    <color name="pin">#FFFF6B6B</color>
+
+    <!-- Совместимые имена для существующих drawable-ресурсов. -->
+    <color name="permission_bg">#FF111418</color>
+    <color name="gps_green">#FF69AFED</color>
+    <color name="gps_green_dark">#FF69AFED</color>
+    <color name="panel">#FF1D232A</color>
+    <color name="status_bar">#FF252D36</color>
+</resources>

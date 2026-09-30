@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
+import android.icu.util.ULocale
+import android.location.Address
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
@@ -16,7 +18,6 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
@@ -26,6 +27,7 @@ import fuck.system.fakegps.databinding.ActivityMapBinding
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -54,7 +56,7 @@ import java.util.concurrent.Executors
  * @see MockLocationStore
  * @see MockLocationService
  */
-class MainActivity : AppCompatActivity()
+class MainActivity : ThemedActivity()
 {
     /** Экраны, между которыми переключается Activity. */
     private enum class Screen {
@@ -69,6 +71,20 @@ class MainActivity : AppCompatActivity()
     private companion object {
         /** Начальный масштаб карты. */
         const val DEFAULT_ZOOM = 14.0
+
+        /** Тёмный источник растровых тайлов Carto Dark Matter для ночной темы. */
+        val DARK_TILE_SOURCE = XYTileSource(
+            "Carto Dark Matter",
+            0,
+            20,
+            256,
+            ".png",
+            arrayOf(
+                "https://a.basemaps.cartocdn.com/dark_all/",
+                "https://b.basemaps.cartocdn.com/dark_all/",
+                "https://c.basemaps.cartocdn.com/dark_all/"
+            )
+        )
 
         /** Разрешения точного и приблизительного доступа к геолокации. */
         val LOCATION_PERMISSIONS = arrayOf(
@@ -289,6 +305,7 @@ class MainActivity : AppCompatActivity()
         binding.message.setText(R.string.permission_message)
         binding.grant.setText(R.string.permission_grant)
         binding.settings.setText(R.string.permission_settings)
+        setupTopBar(binding.topBar, getString(R.string.app_name))
         binding.grant.setOnClickListener {
             permissionLauncher.launch(LOCATION_PERMISSIONS)
         }
@@ -332,6 +349,7 @@ class MainActivity : AppCompatActivity()
         val binding = ActivityMapBinding.inflate(layoutInflater)
         mapBinding = binding
         setContentView(binding.root)
+        setupTopBar(binding.topBar, getString(R.string.app_name))
         setupMap(binding)
         binding.map.onResume()
         currentScreen = Screen.Map
@@ -345,7 +363,7 @@ class MainActivity : AppCompatActivity()
     private fun setupMap(binding: ActivityMapBinding)
     {
         val map = binding.map
-        map.setTileSource(TileSourceFactory.MAPNIK)
+        map.setTileSource(if (isDarkTheme()) DARK_TILE_SOURCE else TileSourceFactory.MAPNIK)
         map.setMultiTouchControls(true)
         map.minZoomLevel = 3.0
         map.maxZoomLevel = 20.0
@@ -493,6 +511,8 @@ class MainActivity : AppCompatActivity()
             showPin(point)
         } else {
             removePin()
+            binding.address.visibility = View.GONE
+            binding.coordinates.visibility = View.VISIBLE
             binding.coordinates.setText(R.string.coordinates_none)
             binding.mapHint.setText(R.string.map_hint)
         }
@@ -518,7 +538,11 @@ class MainActivity : AppCompatActivity()
 
         marker.position = point
         map.invalidate()
-        mapBinding?.coordinates?.setText(R.string.address_loading)
+        mapBinding?.address?.apply {
+            visibility = View.VISIBLE
+            setText(R.string.address_loading)
+        }
+        mapBinding?.coordinates?.visibility = View.INVISIBLE
         requestPlaceName(point)
         mapBinding?.mapHint?.setText(R.string.map_hint_selected)
     }
@@ -595,20 +619,26 @@ class MainActivity : AppCompatActivity()
      * @param point текущая позиция маркера.
      */
     private fun updateCoordinates(point: GeoPoint) {
-        mapBinding?.coordinates?.text = getString(
-            R.string.coordinates_format,
-            point.latitude,
-            point.longitude
-        )
+        mapBinding?.address?.apply {
+            visibility = View.VISIBLE
+            setText(R.string.address_loading)
+        }
+        mapBinding?.coordinates?.apply {
+            visibility = View.VISIBLE
+            text = getString(
+                R.string.coordinates_format,
+                point.latitude,
+                point.longitude
+            )
+        }
     }
 
     /**
      * Асинхронно получает полный адрес по координатам через системный геокодер.
      *
-     * Сначала извлекаются полные строки адреса из [android.location.Address]. Если провайдер не
-     * вернул строк адреса, используются доступные компоненты адреса: объект, улица, населённый
-     * пункт, регион и страна. Результат применяется только для последнего выбранного запроса.
-     * Обновление TextView возвращается в главный поток через [mainHandler].
+     * Адрес приводится к порядку от общего к частному: страна, регион, населённый пункт, улица и
+     * дом. Результат применяется только для последнего выбранного запроса. Обновление TextView
+     * возвращается в главный поток через [mainHandler].
      *
      * @param point координаты, для которых нужно определить адрес.
      */
@@ -616,7 +646,7 @@ class MainActivity : AppCompatActivity()
     {
         val requestId = ++geocodeRequestId
         if (!Geocoder.isPresent()) {
-            updateCoordinates(point)
+            showLocationDetails(point, null)
             return
         }
 
@@ -626,27 +656,7 @@ class MainActivity : AppCompatActivity()
                 Geocoder(this, Locale.getDefault())
                     .getFromLocation(point.latitude, point.longitude, 1)
                     ?.firstOrNull()
-                    ?.let { address ->
-                        val lines = if (address.maxAddressLineIndex >= 0) {
-                            (0..address.maxAddressLineIndex)
-                                .mapNotNull { index -> address.getAddressLine(index)?.trim() }
-                                .filter { it.isNotEmpty() }
-                                .distinct()
-                        } else {
-                            emptyList()
-                        }
-                        val fallback = listOfNotNull(
-                            address.featureName,
-                            address.thoroughfare,
-                            address.subThoroughfare,
-                            address.locality,
-                            address.subAdminArea,
-                            address.adminArea,
-                            address.countryName
-                        ).distinct()
-                        val addressParts = lines.ifEmpty { fallback }
-                        addressParts.joinToString(", ").takeIf { it.isNotEmpty() }
-                    }
+                    ?.let(::formatAddress)
             } catch (_: Exception) {
                 null
             }
@@ -656,16 +666,84 @@ class MainActivity : AppCompatActivity()
                     return@post
                 }
 
-                val coordinates = getString(
-                    R.string.coordinates_format,
-                    point.latitude,
-                    point.longitude
-                )
-                mapBinding?.coordinates?.text = fullAddress?.let {
-                    getString(R.string.coordinates_with_place, it, coordinates)
-                } ?: coordinates
+                showLocationDetails(point, fullAddress)
             }
         }
+    }
+
+    /**
+     * Раздельно отображает полный адрес и координаты выбранной точки.
+     *
+     * @param point точка, координаты которой нужно показать.
+     * @param fullAddress адрес, определённый геокодером, или `null` при отсутствии результата.
+     */
+    private fun showLocationDetails(point: GeoPoint, fullAddress: String?) {
+        val binding = mapBinding ?: return
+        binding.address.apply {
+            visibility = View.VISIBLE
+            text = fullAddress ?: getString(R.string.address_not_found)
+        }
+        binding.coordinates.apply {
+            visibility = View.VISIBLE
+            text = getString(
+                R.string.coordinates_format,
+                point.latitude,
+                point.longitude
+            )
+        }
+    }
+
+    /**
+     * Собирает адрес в порядке от общего к частному.
+     *
+     * @param address ответ системного геокодера.
+     * @return форматированный адрес или `null`, если геокодер не вернул ни одного компонента.
+     */
+    private fun formatAddress(address: Address): String? {
+        val parts = mutableListOf<String>()
+
+        fun addPart(value: String?) {
+            val part = value?.trim()?.takeIf { it.isNotEmpty() } ?: return
+            if (parts.none { it.equals(part, ignoreCase = true) }) {
+                parts += part
+            }
+        }
+
+        addPart(address.postalCode)
+        addPart(nativeCountryName(address))
+        addPart(address.adminArea)
+        addPart(address.subAdminArea)
+        addPart(address.locality)
+        addPart(address.subLocality)
+        val street = listOfNotNull(address.thoroughfare, address.subThoroughfare)
+            .joinToString(", ")
+            .takeIf { it.isNotEmpty() }
+        addPart(street)
+
+        if (parts.isEmpty() && address.maxAddressLineIndex >= 0) {
+            for (index in 0..address.maxAddressLineIndex) {
+                addPart(address.getAddressLine(index))
+            }
+        }
+        return parts.joinToString(", ").takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Возвращает самоназвание страны на её основном локальном языке.
+     *
+     * @param address ответ геокодера с двухбуквенным кодом страны.
+     * @return локальное название страны или название, которое вернул геокодер, если код недоступен.
+     */
+    private fun nativeCountryName(address: Address): String? {
+        val countryCode = address.countryCode?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return address.countryName
+        return runCatching {
+            val countryLocale = ULocale.addLikelySubtags(
+                ULocale.forLanguageTag("und-$countryCode")
+            )
+            countryLocale.getDisplayCountry(countryLocale)
+                .takeIf { it.isNotBlank() }
+        }.getOrNull() ?: address.countryName
     }
 
     /**
