@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GPS"
+rootProject.name = "FAKEGPS"
 include(":app")
