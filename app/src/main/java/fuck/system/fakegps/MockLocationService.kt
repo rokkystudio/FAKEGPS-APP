@@ -239,13 +239,13 @@ class MockLocationService : Service()
             context = this,
             title = getString(R.string.notification_title),
             text = text,
-            iconResId = R.drawable.ic_notification,
+            iconResId = R.mipmap.ic_launcher_foreground,
             actionText = getString(R.string.stop_mock_location).uppercase(),
             actionIntent = stop
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(text)
             .setCustomContentView(contentView)
