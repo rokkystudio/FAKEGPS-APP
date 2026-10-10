@@ -7,8 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.rokkystudio.sharedapp.neoui.NeoThemeMode
+import com.rokkystudio.sharedapp.neoui.NeoTopBarView
 import com.rokkystudio.sharedapp.neoui.NeoUiSettings
-import fuck.system.fakegps.databinding.TopBarBinding
 
 /**
  * Базовая Activity приложения с общей настройкой темы и верхней панели Neo UI.
@@ -45,18 +45,18 @@ abstract class ThemedActivity : AppCompatActivity() {
      * Панель получает основное название, вторую строку с назначением приложения, метку версии и
      * обработчики переключения темы. Данные передаются в штатные поля [NeoTopBarView].
      *
-     * @param binding привязка верхней панели.
+     * @param topBar верхняя панель экрана.
      * @param title заголовок текущего экрана.
      */
-    protected fun setupTopBar(binding: TopBarBinding, title: String) {
+    protected fun setupTopBar(topBar: NeoTopBarView, title: String) {
         val settings = neoUiSettings(this)
-        binding.neoTopBar.setAppInfo(
+        topBar.setAppInfo(
             title = title,
             subtitle = getString(R.string.app_subtitle),
             version = appVersionName(),
             iconResId = R.mipmap.ic_launcher,
         )
-        settings.bindTopBar(binding.neoTopBar) {
+        settings.bindTopBar(topBar) {
             delegate.localNightMode = settings.appCompatNightMode()
             recreate()
         }

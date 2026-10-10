@@ -7,9 +7,10 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <include
-        android:id="@+id/topBar"
-        layout="@layout/top_bar" />
+    <com.rokkystudio.sharedapp.neoui.NeoTopBarView
+        android:id="@+id/neoTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 
     <LinearLayout
         android:layout_width="match_parent"

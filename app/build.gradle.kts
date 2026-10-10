@@ -12,8 +12,8 @@ android {
         applicationId = "fuck.system.fakegps"
         minSdk = 26
         targetSdk = 37
-        versionCode = 33
-        versionName = "1.0.32"
+        versionCode = 34
+        versionName = "1.0.33"
     }
 
     buildTypes {

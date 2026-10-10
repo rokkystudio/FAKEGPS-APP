@@ -388,7 +388,7 @@ class MainActivity : ThemedActivity()
         val binding = ActivityMapBinding.inflate(layoutInflater)
         mapBinding = binding
         setContentView(binding.root)
-        setupTopBar(binding.topBar, getString(R.string.app_name))
+        setupTopBar(binding.neoTopBar, getString(R.string.app_name))
         binding.mapLayersButton.setOnClickListener { showMapLayersMenu(binding) }
         binding.currentLocation.setOnClickListener { showDeviceLocationOrRequestPermission() }
         setupMap(binding)
