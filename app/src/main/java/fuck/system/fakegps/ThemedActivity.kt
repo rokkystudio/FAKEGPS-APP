@@ -1,106 +1,131 @@
 package fuck.system.fakegps
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
-import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
+import com.rokkystudio.sharedapp.neoui.NeoThemeMode
+import com.rokkystudio.sharedapp.neoui.NeoUiSettings
 import fuck.system.fakegps.databinding.TopBarBinding
-import java.util.Locale
 
 /**
- * Базовая Activity с сохраняемыми настройками языка и цветовой темы.
+ * Базовая Activity приложения с общей настройкой темы и верхней панели Neo UI.
  *
- * Выбранный язык применяется к конфигурации до создания View. Ночной режим задаётся через
- * [AppCompatDelegate], поэтому Android выбирает нужные ресурсы из `values-night` без ручного
- * обновления цветов и без конфликтов с AppCompat.
+ * Activity применяет выбранную пользователем тему до создания интерфейса и предоставляет общий
+ * метод настройки верхней панели с названием приложения, второй строкой и текущей версией сборки.
  */
 abstract class ThemedActivity : AppCompatActivity() {
-    /** Ключи настроек интерфейса. */
-    private companion object {
-        /** Имя SharedPreferences с настройками интерфейса. */
-        const val PREFS_UI = "fake_gps_ui"
-
-        /** Ключ выбранного языка интерфейса. */
-        const val KEY_LANGUAGE = "language"
-
-        /** Ключ выбранной ночной темы. */
-        const val KEY_DARK_THEME = "dark_theme"
-    }
-
     /**
-     * Создаёт контекст с сохранённым языком интерфейса.
+     * Подготавливает конфигурацию контекста с локалью и темой из настроек Neo UI.
      *
-     * @param newBase исходный контекст, предоставленный Android.
+     * @param newBase исходный контекст Activity.
      */
     override fun attachBaseContext(newBase: Context) {
-        val prefs = newBase.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
-        val language = prefs.getString(KEY_LANGUAGE, null)
-            ?: if (Locale.getDefault().language == "ru") "ru" else "en"
-        val configuration = Configuration(newBase.resources.configuration).apply {
-            setLocale(Locale.forLanguageTag(language))
-        }
+        val configuration = Configuration(newBase.resources.configuration)
+        neoUiSettings(newBase).applyToConfiguration(configuration)
         super.attachBaseContext(newBase.createConfigurationContext(configuration))
     }
 
-    /** Устанавливает общую тему и выбранный ночной режим до создания интерфейса Activity. */
+    /**
+     * Применяет AppCompat-тему и продолжает создание Activity.
+     *
+     * @param savedInstanceState состояние Activity, сохранённое перед пересозданием, или `null`.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
-        delegate.localNightMode = if (isDarkTheme()) {
-            AppCompatDelegate.MODE_NIGHT_YES
-        } else {
-            AppCompatDelegate.MODE_NIGHT_NO
-        }
+        delegate.localNightMode = neoUiSettings(this).appCompatNightMode()
         setTheme(R.style.Theme_GPS)
         super.onCreate(savedInstanceState)
     }
 
     /**
-     * Настраивает общую верхнюю панель и обработчики смены языка и темы.
+     * Настраивает верхнюю панель Neo UI для экрана приложения.
      *
-     * @param binding привязка включённой разметки `top_bar`.
-     * @param title заголовок, отображаемый на панели.
+     * Панель получает основное название, вторую строку с назначением приложения, метку версии и
+     * обработчики переключения темы. Данные передаются в штатные поля [NeoTopBarView].
+     *
+     * @param binding привязка верхней панели.
+     * @param title заголовок текущего экрана.
      */
     protected fun setupTopBar(binding: TopBarBinding, title: String) {
-        binding.titleTextView.text = title
-        binding.backButton.visibility = View.GONE
-        renderTopBarButtons(binding)
-        binding.themeToggleButton.setOnClickListener {
-            val darkTheme = !isDarkTheme()
-            preferences().edit()
-                .putBoolean(KEY_DARK_THEME, darkTheme)
-                .apply()
-            delegate.localNightMode = if (darkTheme) {
-                AppCompatDelegate.MODE_NIGHT_YES
-            } else {
-                AppCompatDelegate.MODE_NIGHT_NO
-            }
-        }
-        binding.languageFlag.setOnClickListener {
-            preferences().edit()
-                .putString(KEY_LANGUAGE, if (currentLanguage() == "ru") "en" else "ru")
-                .apply()
+        val settings = neoUiSettings(this)
+        binding.neoTopBar.setAppInfo(
+            title = title,
+            subtitle = getString(R.string.app_subtitle),
+            version = appVersionName(),
+            iconResId = R.mipmap.ic_launcher,
+        )
+        settings.bindTopBar(binding.neoTopBar) {
+            delegate.localNightMode = settings.appCompatNightMode()
             recreate()
         }
     }
 
-    /** Обновляет иконки в соответствии с активными настройками интерфейса. */
-    private fun renderTopBarButtons(binding: TopBarBinding) {
-        binding.themeToggleButton.setImageResource(
-            if (isDarkTheme()) R.drawable.theme_moon else R.drawable.theme_sun
-        )
-        binding.languageFlag.setImageResource(
-            if (currentLanguage() == "ru") R.drawable.flag_ru else R.drawable.flag_us
+    /** @return `true`, если активна тёмная тема Neo UI. */
+    protected fun isDarkTheme(): Boolean = neoUiSettings(this).getTheme() == NeoThemeMode.DARK
+
+    /**
+     * Возвращает имя версии текущего APK.
+     *
+     * Значение берётся из package info, которое Android формирует из Gradle-полей `versionName` и
+     * `versionCode`.
+     *
+     * @return строка версии приложения.
+     */
+    private fun appVersionName(): String
+    {
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0)
+        }
+        return packageInfo.versionName ?: ""
+    }
+
+    /**
+     * Создаёт объект настроек Neo UI и выполняет перенос старого ключа темы.
+     *
+     * @param context контекст, из которого читаются SharedPreferences.
+     * @return настройки Neo UI для текущего приложения.
+     */
+    private fun neoUiSettings(context: Context): NeoUiSettings {
+        migrateLegacyUiSettings(context)
+        return NeoUiSettings(
+            context = context,
+            preferencesName = PREFS_UI,
+            defaultTheme = NeoThemeMode.LIGHT,
+            defaultLanguageTag = null,
         )
     }
 
-    /** @return SharedPreferences с настройками языка и темы. */
-    private fun preferences() = getSharedPreferences(PREFS_UI, MODE_PRIVATE)
+    /**
+     * Переносит старый булевый ключ тёмной темы в строковый ключ Neo UI.
+     *
+     * @param context контекст, из которого читаются SharedPreferences.
+     */
+    private fun migrateLegacyUiSettings(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_UI, MODE_PRIVATE)
+        if (!prefs.contains(KEY_THEME) && prefs.contains(KEY_DARK_THEME)) {
+            val theme = if (prefs.getBoolean(KEY_DARK_THEME, false)) {
+                NeoThemeMode.DARK.preferenceValue
+            } else {
+                NeoThemeMode.LIGHT.preferenceValue
+            }
+            prefs.edit().putString(KEY_THEME, theme).apply()
+        }
+    }
 
-    /** @return `true`, если пользователь выбрал ночную тему. */
-    protected fun isDarkTheme(): Boolean = preferences().getBoolean(KEY_DARK_THEME, false)
+    /** Константы SharedPreferences для настроек интерфейса. */
+    private companion object {
+        /** Имя файла настроек интерфейса. */
+        const val PREFS_UI = "fake_gps_ui"
 
-    /** @return текущий код языка интерфейса: `ru` или `en`. */
-    private fun currentLanguage(): String = preferences().getString(KEY_LANGUAGE, null)
-        ?: if (Locale.getDefault().language == "ru") "ru" else "en"
+        /** Старый ключ тёмной темы. */
+        const val KEY_DARK_THEME = "dark_theme"
+
+        /** Ключ темы Neo UI. */
+        const val KEY_THEME = "theme"
+    }
 }

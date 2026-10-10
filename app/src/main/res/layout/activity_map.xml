@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -23,75 +24,109 @@
             android:clickable="true"
             android:focusable="true" />
 
-        <TextView
-            android:id="@+id/map_attribution"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:layout_margin="10dp"
-            android:background="@drawable/bg_card"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="4dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="10sp"
-            tools:text="© OpenStreetMap contributors" />
+        <ImageButton
+            android:id="@+id/mapLayersButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_map_floating_button"
+            android:backgroundTint="@null"
+            android:contentDescription="@string/map_layers"
+            android:elevation="10dp"
+            android:padding="14dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_map_layers"
+            android:stateListAnimator="@null" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
-            android:layout_margin="12dp"
-            android:background="@drawable/bg_card"
-            android:elevation="8dp"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/map_hint"
+            <ImageButton
+                android:id="@+id/currentLocation"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_gravity="end"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="10dp"
+                android:background="@drawable/bg_map_floating_button"
+                android:backgroundTint="@null"
+                android:contentDescription="@string/current_location"
+                android:elevation="10dp"
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_navigation"
+                android:stateListAnimator="@null" />
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:text="@string/map_hint"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp" />
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/bg_card"
+                android:elevation="8dp"
+                android:orientation="vertical"
+                android:padding="16dp">
 
-            <TextView
-                android:id="@+id/address"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:breakStrategy="high_quality"
-                android:hyphenationFrequency="full"
-                android:includeFontPadding="false"
-                android:lineSpacingExtra="2dp"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:visibility="gone"
-                tools:text="ул. Октябрьская, 136, Бобруйск, Беларусь" />
+                <TextView
+                    android:id="@+id/map_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:text="@string/map_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
 
-            <TextView
-                android:id="@+id/coordinates"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
-                android:includeFontPadding="false"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                tools:text="55.755800, 37.617300" />
+                <TextView
+                    android:id="@+id/address"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:breakStrategy="high_quality"
+                    android:ellipsize="end"
+                    android:hyphenationFrequency="full"
+                    android:includeFontPadding="false"
+                    android:lineSpacingExtra="2dp"
+                    android:maxLines="2"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:visibility="gone"
+                    tools:text="ул. Октябрьская, 136, Бобруйск, Беларусь" />
 
-            <Button
-                android:id="@+id/disable"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/bg_button"
-                android:enabled="false"
-                android:minHeight="48dp"
-                android:text="@string/disable_mock_location"
-                android:textAllCaps="false"
-                android:textColor="@color/accent"
-                android:visibility="gone" />
+                <TextView
+                    android:id="@+id/coordinates"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fontFamily="monospace"
+                    android:includeFontPadding="false"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    tools:text="55.755800, 37.617300" />
+
+                <Button
+                    android:id="@+id/disable"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_button"
+                    android:backgroundTint="@null"
+                    android:enabled="false"
+                    android:fontFamily="sans"
+                    android:stateListAnimator="@null"
+                    android:text="@string/disable_mock_location"
+                    android:textAllCaps="false"
+                    android:textColor="@color/action_button_text_color"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    app:backgroundTint="@null" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>

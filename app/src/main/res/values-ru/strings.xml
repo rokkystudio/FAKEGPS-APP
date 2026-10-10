@@ -1,11 +1,19 @@
 <resources>
     <string name="app_name">Fake GPS</string>
     <string name="app_icon">Иконка Fake GPS</string>
-    <string name="change_theme">Сменить тему</string>
-    <string name="change_language">Сменить язык</string>
+    <string name="app_subtitle">Фиктивная геолокация</string>
     <string name="map_layers">Слои карты</string>
-    <string name="map_provider_open_street_map">OpenStreetMap — стандартная</string>
-    <string name="map_provider_esri_dark_gray">Esri — тёмная карта</string>
+    <string name="current_location">Текущее местоположение</string>
+    <string name="current_location_permission_denied">Доступ к геолокации нужен, чтобы показать вашу текущую точку</string>
+    <string name="current_location_disabled">Включите геолокацию устройства, чтобы показать текущую точку</string>
+    <string name="current_location_unavailable">Координаты пока неизвестны</string>
+    <string name="current_location_mock_active">Отключите фиктивный GPS, чтобы найти местоположение устройства</string>
+    <string name="current_location_settings_unavailable">Не удалось открыть настройки геолокации</string>
+    <string name="current_location_search_title">Определяем координаты</string>
+    <string name="current_location_search_message">Ждём координаты от Android…</string>
+    <string name="cancel">Отмена</string>
+    <string name="map_provider_open_street_map">OpenStreetMap</string>
+    <string name="map_provider_esri_dark_gray">Ersi Dark</string>
     <string name="back">Назад</string>
     <string name="permission_title">Нужен доступ к геолокации</string>
     <string name="permission_message">Карта откроется только после разрешения. Без него нельзя выбрать точку и подменять GPS.</string>
@@ -25,17 +33,19 @@
     <string name="status_stopped">Статус: GPS не подменяется</string>
     <string name="status_running">Статус: фиктивные координаты отдаются</string>
     <string name="start_mock_location">Старт</string>
-    <string name="stop_mock_location">Стоп</string>
+    <string name="stop_mock_location">Остановить</string>
     <string name="point_required">Сначала выберите точку на карте</string>
-    <string name="mock_app_title">Выберите Fake GPS для фиктивных координат</string>
-    <string name="mock_app_message">Это приложение для режима разработчика.
-
-Настройки → Для разработчиков → Выбрать приложение для фиктивных местоположений → Fake GPS</string>
-    <string name="mock_app_open">Открыть настройки разработчика</string>
+    <string name="mock_app_title">Выберите приложение</string>
+    <string name="mock_app_message">Выберите Fake GPS как приложение для фиктивных координат:\n\n1. Откройте «Для разработчиков»\n2. Найдите «Приложение для фиктивных местоположений»\n3. Выберите Fake GPS</string>
+    <string name="mock_app_select_title">Выберите приложение</string>
+    <string name="mock_app_select_message">Выберите Fake GPS как приложение для фиктивных координат:\n\n1. Откройте «Для разработчиков»\n2. Найдите «Приложение для фиктивных местоположений»\n3. Выберите Fake GPS</string>
+    <string name="mock_app_enable_developer_title">Включите режим разработчика</string>
+    <string name="mock_app_enable_developer_message">Сначала включите параметры разработчика, затем выберите Fake GPS:\n\n1. Откройте «О телефоне»\n2. Нажмите «Номер сборки» 7 раз\n3. Вернитесь в настройки и откройте «Для разработчиков»</string>
+    <string name="mock_app_open">Настройки</string>
     <string name="mock_app_check">Проверить снова</string>
     <string name="mock_app_close">Закрыть</string>
     <string name="mock_app_blocked">Карта закрыта, пока Fake GPS не выбран для фиктивных местоположений</string>
-    <string name="mock_app_open_failed">Включите сначала режим разработчика</string>
+    <string name="mock_app_open_failed">Откройте параметры разработчика вручную и выберите Fake GPS для фиктивных местоположений</string>
     <string name="notification_channel">Фиктивный GPS</string>
     <string name="notification_title">Fake GPS работает</string>
 </resources>

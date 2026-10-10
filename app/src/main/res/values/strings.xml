@@ -1,11 +1,19 @@
 <resources>
     <string name="app_name">Fake GPS</string>
     <string name="app_icon">Fake GPS icon</string>
-    <string name="change_theme">Change theme</string>
-    <string name="change_language">Change language</string>
+    <string name="app_subtitle">Mock location</string>
     <string name="map_layers">Map layers</string>
-    <string name="map_provider_open_street_map">OpenStreetMap — standard</string>
-    <string name="map_provider_esri_dark_gray">Esri — Dark Gray</string>
+    <string name="current_location">Current location</string>
+    <string name="current_location_permission_denied">Location access is needed to show your current position</string>
+    <string name="current_location_disabled">Enable device location to show your current position</string>
+    <string name="current_location_unavailable">Coordinates are not available yet</string>
+    <string name="current_location_mock_active">Disable fake GPS to search for the device location</string>
+    <string name="current_location_settings_unavailable">Location settings could not be opened</string>
+    <string name="current_location_search_title">Searching location</string>
+    <string name="current_location_search_message">Waiting for coordinates from Android…</string>
+    <string name="cancel">Cancel</string>
+    <string name="map_provider_open_street_map">OpenStreetMap</string>
+    <string name="map_provider_esri_dark_gray">Ersi Dark</string>
     <string name="back">Go back</string>
     <string name="permission_title">Location access is required</string>
     <string name="permission_message">The map opens after location access is granted. Without it, you cannot choose a point or spoof GPS.</string>
@@ -27,15 +35,17 @@
     <string name="start_mock_location">Start</string>
     <string name="stop_mock_location">Stop</string>
     <string name="point_required">Choose a point on the map first</string>
-    <string name="mock_app_title">Choose Fake GPS for mock locations</string>
-    <string name="mock_app_message">This app uses Android developer options.
-
-Settings → Developer options → Select mock location app → Fake GPS</string>
-    <string name="mock_app_open">Open developer options</string>
+    <string name="mock_app_title">Choose app</string>
+    <string name="mock_app_message">Choose Fake GPS as the mock location app:\n\n1. Open Developer options\n2. Find Select mock location app\n3. Choose Fake GPS</string>
+    <string name="mock_app_select_title">Choose app</string>
+    <string name="mock_app_select_message">Choose Fake GPS as the mock location app:\n\n1. Open Developer options\n2. Find Select mock location app\n3. Choose Fake GPS</string>
+    <string name="mock_app_enable_developer_title">Enable Developer options</string>
+    <string name="mock_app_enable_developer_message">Enable Developer options first, then choose Fake GPS:\n\n1. Open About phone\n2. Tap Build number 7 times\n3. Return to settings and open Developer options</string>
+    <string name="mock_app_open">Settings</string>
     <string name="mock_app_check">Check again</string>
     <string name="mock_app_close">Close</string>
     <string name="mock_app_blocked">The map is unavailable until Fake GPS is selected for mock locations</string>
-    <string name="mock_app_open_failed">Enable developer options first</string>
+    <string name="mock_app_open_failed">Open Developer options manually and choose Fake GPS for mock locations</string>
     <string name="notification_channel">Fake GPS</string>
     <string name="notification_title">Fake GPS is active</string>
 </resources>

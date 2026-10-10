@@ -4,12 +4,30 @@
   <component name="GradleSettings">
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
+        <compositeConfiguration>
+          <compositeBuild compositeDefinitionSource="SCRIPT">
+            <builds>
+              <build path="$PROJECT_DIR$/../SHARED-APP/geo" name="geo">
+                <projects>
+                  <project path="$PROJECT_DIR$/../SHARED-APP/geo" />
+                </projects>
+              </build>
+              <build path="$PROJECT_DIR$/../SHARED-APP/neoui" name="neoui">
+                <projects>
+                  <project path="$PROJECT_DIR$/../SHARED-APP/neoui" />
+                </projects>
+              </build>
+            </builds>
+          </compositeBuild>
+        </compositeConfiguration>
         <option name="testRunner" value="CHOOSE_PER_TEST" />
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/../SHARED-APP/geo" />
+            <option value="$PROJECT_DIR$/../SHARED-APP/neoui" />
           </set>
         </option>
       </GradleProjectSettings>

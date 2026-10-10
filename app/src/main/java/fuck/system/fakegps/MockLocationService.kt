@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Process
+import com.rokkystudio.sharedapp.neoui.NeoNotificationViews
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
@@ -191,10 +192,11 @@ class MockLocationService : Service()
     }
 
     /**
-     * Переводит сервис в foreground-режим с типом location.
+     * Переводит сервис в foreground-режим с типом special use.
      *
-     * Для Android 14 и новее явно передаёт тип foreground-сервиса, а на более старых версиях
-     * использует совместимый вариант API.
+     * Для Android 14 и новее явно передаёт тип foreground-сервиса без runtime prerequisites,
+     * поскольку сервис публикует выбранную пользователем тестовую точку и не читает реальное
+     * местоположение устройства. На более старых версиях используется совместимый вариант API.
      */
     private fun startForegroundNotification() {
         val notification = buildNotification()
@@ -202,7 +204,7 @@ class MockLocationService : Service()
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -233,14 +235,25 @@ class MockLocationService : Service()
             MockLocationStore.longitude
         )
 
+        val contentView = NeoNotificationViews.serviceAction(
+            context = this,
+            title = getString(R.string.notification_title),
+            text = text,
+            iconResId = R.drawable.ic_notification,
+            actionText = getString(R.string.stop_mock_location).uppercase(),
+            actionIntent = stop
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(text)
+            .setCustomContentView(contentView)
+            .setCustomBigContentView(contentView)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(launch)
-            .addAction(0, getString(R.string.stop_mock_location), stop)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }

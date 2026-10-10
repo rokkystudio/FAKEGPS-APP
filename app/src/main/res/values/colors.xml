@@ -13,6 +13,10 @@
     <color name="accent">#FF69AFED</color>
     <color name="title_bar_button_pressed">#FFD8DEE6</color>
     <color name="button_pressed">#FFEFF2F5</color>
+    <color name="button_surface">#FFF0F1F2</color>
+    <color name="button_disabled">#FFE1E2E4</color>
+    <color name="button_text_disabled">#FFC7C9CC</color>
+    <color name="border_disabled">#FFC9CCD1</color>
     <color name="pin">#FFE53935</color>
 
     <!-- Совместимые имена для существующих drawable-ресурсов. -->

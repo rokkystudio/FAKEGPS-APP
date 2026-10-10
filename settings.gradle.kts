@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "FAKEGPS"
 include(":app")
+includeBuild("../SHARED-APP/geo")
+includeBuild("../SHARED-APP/neoui")

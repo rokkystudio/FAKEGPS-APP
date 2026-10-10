@@ -6,25 +6,29 @@ import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.ColorDrawable
 import android.icu.util.ULocale
 import android.location.Address
 import android.location.Geocoder
-import android.net.Uri
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
+import android.os.CancellationSignal
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.widget.PopupMenu
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
-import fuck.system.fakegps.MainActivity.Companion.LOCATION_PERMISSIONS
-import fuck.system.fakegps.databinding.ActivityMainBinding
 import fuck.system.fakegps.databinding.ActivityMapBinding
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
@@ -43,10 +47,8 @@ import java.util.concurrent.Executors
 /**
  * Главный экран приложения Fake GPS, управляющий выбором фиктивного местоположения.
  *
- * Activity переключается между двумя состояниями:
- *
- * 1. экран запроса разрешения на геолокацию;
- * 2. экран карты с выбранной точкой.
+ * Activity открывает экран карты с выбранной фиктивной точкой без запроса доступа к реальному
+ * местоположению устройства.
  *
  * Выбор точки сохраняется в [MockLocationStore] и передаётся в [MockLocationService]. При
  * отключении фиктивного местоположения сервис останавливается, а маркер удаляется с карты.
@@ -63,9 +65,6 @@ class MainActivity : ThemedActivity()
 {
     /** Экраны, между которыми переключается Activity. */
     private enum class Screen {
-        /** Экран запроса разрешения на геолокацию. */
-        Permission,
-
         /** Экран с картой и выбранной фиктивной точкой. */
         Map
     }
@@ -81,8 +80,17 @@ class MainActivity : ThemedActivity()
 
     /** Константы, общие для логики главного экрана. */
     private companion object {
+        /** Тег Logcat для диагностики кнопки текущего местоположения. */
+        const val LOCATION_LOG_TAG = "FakeGpsLocation"
+
         /** Начальный масштаб карты. */
         const val DEFAULT_ZOOM = 14.0
+
+        /** Масштаб карты при переходе к району реального местоположения устройства. */
+        const val DEVICE_LOCATION_ZOOM = 15.0
+
+        /** Максимальное время ожидания одноразового запроса реального местоположения. */
+        const val DEVICE_LOCATION_TIMEOUT_MS = 12_000L
 
         /**
          * Тёмный источник растровых тайлов Esri World Dark Gray Canvas.
@@ -109,7 +117,7 @@ class MainActivity : ThemedActivity()
         /** Ключ выбранного источника карты. */
         const val KEY_MAP_PROVIDER = "map_provider"
 
-        /** Разрешения точного и приблизительного доступа к геолокации. */
+        /** Разрешения точного и приблизительного доступа к реальному местоположению устройства. */
         val LOCATION_PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -118,9 +126,6 @@ class MainActivity : ThemedActivity()
 
     /** Диалог с инструкцией по выбору приложения для фиктивных местоположений в настройках. */
     private var mockAppDialog: AlertDialog? = null
-
-    /** Привязка экрана запроса разрешения или `null`, когда открыт экран карты. */
-    private var gateBinding: ActivityMainBinding? = null
 
     /** Привязка экрана карты или `null`, пока карта не создана. */
     private var mapBinding: ActivityMapBinding? = null
@@ -151,6 +156,24 @@ class MainActivity : ThemedActivity()
     /** Показывался ли запрос разрешения на уведомления в текущем экземпляре Activity. */
     private var notificationPermissionAsked = false
 
+    /** Нужно ли повторить поиск текущей точки после возврата из системных настроек геолокации. */
+    private var findDeviceLocationAfterSettings = false
+
+    /** Идентификатор последнего пользовательского запроса перехода к текущей точке. */
+    private var deviceLocationRequestId = 0L
+
+    /** Активный системный запрос текущего местоположения, если он ожидает результата. */
+    private var activeDeviceLocationCancellation: CancellationSignal? = null
+
+    /** Менеджер, в котором зарегистрирован legacy listener текущего местоположения. */
+    private var activeDeviceLocationManager: LocationManager? = null
+
+    /** Legacy listener текущего местоположения, если запрос выполняется через requestSingleUpdate. */
+    private var activeDeviceLocationListener: LocationListener? = null
+
+    /** Диалог, показываемый во время ожидания координат от LocationManager. */
+    private var deviceLocationProgressDialog: AlertDialog? = null
+
     /** Последняя выбранная точка, сохраняемая в `Bundle` при пересоздании Activity. */
     private var selectedPoint = GeoPoint(
         MockLocationStore.DEFAULT_LATITUDE,
@@ -158,20 +181,39 @@ class MainActivity : ThemedActivity()
     )
 
     /**
-     * Обработчик результата запроса разрешений на точное и приблизительное местоположение.
-     * При успешном результате открывает карту, иначе оставляет пользователя на экране разрешений.
+     * Обработчик результата запроса доступа к реальному местоположению устройства.
+     * При успешном результате центрирует карту на текущем местоположении, иначе оставляет карту
+     * в текущей позиции и показывает короткое сообщение.
      */
-    private val permissionLauncher = registerForActivityResult(
+    private val deviceLocationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        if (hasLocationPermission()) {
-            routeAccess()
+    ) { result ->
+        Log.d(LOCATION_LOG_TAG, "Permission result: $result")
+        if (result.values.any { granted -> granted }) {
+            Log.d(LOCATION_LOG_TAG, "At least one location permission granted; requesting device location")
+            showDeviceLocation()
         } else {
-            showPermissionScreen()
-            Toast.makeText(
-                this, R.string.permission_denied,
-                Toast.LENGTH_SHORT
-            ).show()
+            Log.d(LOCATION_LOG_TAG, "Location permission denied")
+            Toast.makeText(this, R.string.current_location_permission_denied, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Обработчик возврата из системных настроек геолокации.
+     *
+     * Если пользователь включил геолокацию устройства, приложение сразу повторяет поиск текущей
+     * точки. Если геолокация осталась выключенной, будет снова открыт системный экран включения.
+     */
+    private val deviceLocationSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        Log.d(
+            LOCATION_LOG_TAG,
+            "Returned from location settings; retry=$findDeviceLocationAfterSettings"
+        )
+        if (findDeviceLocationAfterSettings) {
+            findDeviceLocationAfterSettings = false
+            showDeviceLocationOrRequestPermission()
         }
     }
 
@@ -190,7 +232,7 @@ class MainActivity : ThemedActivity()
      * Инициализирует Activity.
      *
      * Загружает сохранённые координаты, восстанавливает точку после пересоздания Activity и
-     * открывает экран разрешений либо карту в зависимости от текущих разрешений.
+     * открывает карту для выбора фиктивной точки.
      *
      * @param savedInstanceState состояние Activity, сохранённое перед пересозданием, или `null`.
      */
@@ -198,22 +240,20 @@ class MainActivity : ThemedActivity()
         super.onCreate(savedInstanceState)
         MockLocationStore.load(this)
         restorePoint(savedInstanceState)
-        routeAccess(requestLocationIfNeeded = true)
+        routeAccess()
     }
 
     /**
      * Возобновляет отображение карты и повторно проверяет доступ приложения.
      *
-     * Метод вызывается также после возврата из системных настроек, поэтому здесь повторно
-     * синхронизируется состояние mock-сервиса и диалога выбора приложения.
+     * Метод вызывается после возврата Activity на экран, поэтому синхронизирует карту, состояние
+     * mock-сервиса и диалог выбора приложения для фиктивных местоположений без пересоздания UI.
      */
     override fun onResume() {
         super.onResume()
-        routeAccess()
-        if (currentScreen == Screen.Map) {
-            mapBinding?.map?.onResume()
-            syncMockState()
-        }
+        mapBinding?.map?.onResume()
+        syncMockState()
+        updateMockAppDialog()
     }
 
     /** Приостанавливает карту, когда Activity уходит с переднего плана. */
@@ -232,6 +272,7 @@ class MainActivity : ThemedActivity()
     override fun onDestroy() {
         mockAppDialog?.dismiss()
         mockAppDialog = null
+        cancelDeviceLocationLookup()
         geocodeRequestId++
         geocoderExecutor.shutdownNow()
         mapBinding?.map?.onDetach()
@@ -250,43 +291,29 @@ class MainActivity : ThemedActivity()
     }
 
     /**
-     * Определяет доступный экран и переводит Activity в соответствующее состояние.
+     * Открывает карту и синхронизирует доступ приложения к публикации фиктивных координат.
      *
-     * @param requestLocationIfNeeded нужно ли сразу запустить системный запрос разрешений.
+     * При отсутствии системного выбора приложения для фиктивных местоположений работающий сервис
+     * останавливается, а поверх карты показывается инструкция по настройке.
      */
-    private fun routeAccess(requestLocationIfNeeded: Boolean = false)
+    private fun routeAccess()
     {
-        val target = requiredScreen()
-        if (target != Screen.Map || !isMockLocationApp()) {
+        if (!isMockLocationApp()) {
             stopMockIfNeeded()
         }
 
-        if (target == currentScreen) {
-            if (requestLocationIfNeeded && target == Screen.Permission) {
-                permissionLauncher.launch(LOCATION_PERMISSIONS)
-            }
-        } else {
-            when (target) {
-                Screen.Permission -> {
-                    showPermissionScreen()
-                    if (requestLocationIfNeeded) {
-                        permissionLauncher.launch(LOCATION_PERMISSIONS)
-                    }
-                }
-                Screen.Map -> showMapScreen()
-            }
+        if (currentScreen != Screen.Map) {
+            showMapScreen()
         }
         updateMockAppDialog()
     }
 
     /**
-     * Возвращает экран, который должен быть открыт при текущем состоянии разрешений.
+     * Возвращает основной экран приложения.
      *
-     * @return экран карты при наличии разрешения или экран запроса разрешения.
+     * @return экран карты, доступный без разрешения на реальное местоположение устройства.
      */
-    private fun requiredScreen(): Screen {
-        return if (hasLocationPermission()) Screen.Map else Screen.Permission
-    }
+    private fun requiredScreen(): Screen = Screen.Map
 
     /**
      * Синхронизирует диалог выбора приложения для фиктивных местоположений.
@@ -308,49 +335,35 @@ class MainActivity : ThemedActivity()
             return
         }
 
+        val contentView = layoutInflater.inflate(R.layout.dialog_mock_app, null)
+        val developerSettingsEnabled = isDeveloperSettingsEnabled()
+        contentView.findViewById<TextView>(R.id.mockAppTitle).setText(
+            if (developerSettingsEnabled) {
+                R.string.mock_app_select_title
+            } else {
+                R.string.mock_app_enable_developer_title
+            }
+        )
+        contentView.findViewById<TextView>(R.id.mockAppMessage).setText(
+            if (developerSettingsEnabled) {
+                R.string.mock_app_select_message
+            } else {
+                R.string.mock_app_enable_developer_message
+            }
+        )
         mockAppDialog = AlertDialog.Builder(this)
-            .setTitle(R.string.mock_app_title)
-            .setMessage(R.string.mock_app_message)
-            .setPositiveButton(R.string.mock_app_open) { _, _ -> openDeveloperSettings() }
-            .setNegativeButton(R.string.mock_app_close, null)
-            .setOnDismissListener { mockAppDialog = null }
-            .show()
-    }
-
-    /**
-     * Настраивает и показывает экран запроса разрешения на геолокацию.
-     *
-     * Перед установкой экрана разрешений карта останавливается и отсоединяется, чтобы у Activity
-     * оставался только один активный набор ViewBinding.
-     */
-    private fun showPermissionScreen()
-    {
-        detachMap()
-        val binding = bindGate()
-        binding.title.setText(R.string.permission_title)
-        binding.message.setText(R.string.permission_message)
-        binding.grant.setText(R.string.permission_grant)
-        binding.settings.setText(R.string.permission_settings)
-        setupTopBar(binding.topBar, getString(R.string.app_name))
-        binding.topBar.mapLayersButton.visibility = View.GONE
-        binding.grant.setOnClickListener {
-            permissionLauncher.launch(LOCATION_PERMISSIONS)
-        }
-
-        binding.settings.setOnClickListener { openAppSettings() }
-        currentScreen = Screen.Permission
-    }
-
-    /**
-     * Создаёт привязку экрана разрешений и устанавливает его корневой View.
-     *
-     * @return созданная привязка экрана разрешений.
-     */
-    private fun bindGate(): ActivityMainBinding {
-        val binding = ActivityMainBinding.inflate(layoutInflater)
-        gateBinding = binding
-        setContentView(binding.root)
-        return binding
+            .setView(contentView)
+            .create()
+            .apply {
+                setOnDismissListener { mockAppDialog = null }
+                show()
+                window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                contentView.findViewById<View>(R.id.mockAppClose).setOnClickListener { dismiss() }
+                contentView.findViewById<View>(R.id.mockAppOpen).setOnClickListener {
+                    dismiss()
+                    openDeveloperSettings()
+                }
+            }
     }
 
     /**
@@ -371,14 +384,13 @@ class MainActivity : ThemedActivity()
             return
         }
 
-        gateBinding = null
         configureOsmDroid()
         val binding = ActivityMapBinding.inflate(layoutInflater)
         mapBinding = binding
         setContentView(binding.root)
         setupTopBar(binding.topBar, getString(R.string.app_name))
-        binding.topBar.mapLayersButton.visibility = View.VISIBLE
-        binding.topBar.mapLayersButton.setOnClickListener { showMapLayersMenu(binding) }
+        binding.mapLayersButton.setOnClickListener { showMapLayersMenu(binding) }
+        binding.currentLocation.setOnClickListener { showDeviceLocationOrRequestPermission() }
         setupMap(binding)
         binding.map.onResume()
         currentScreen = Screen.Map
@@ -434,6 +446,397 @@ class MainActivity : ThemedActivity()
     }
 
     /**
+     * Центрирует карту на реальном местоположении устройства или запускает системный запрос
+     * разрешения на геолокацию.
+     */
+    private fun showDeviceLocationOrRequestPermission()
+    {
+        Log.d(LOCATION_LOG_TAG, "Current location button clicked")
+        if (hasDeviceLocationPermission()) {
+            Log.d(LOCATION_LOG_TAG, "Location permission already granted")
+            showDeviceLocation()
+            return
+        }
+
+        Log.d(LOCATION_LOG_TAG, "Location permission missing; launching permission request")
+        deviceLocationPermissionLauncher.launch(LOCATION_PERMISSIONS)
+    }
+
+    /**
+     * Проверяет наличие доступа к реальному местоположению устройства.
+     *
+     * @return `true`, если выдано точное или приблизительное разрешение.
+     */
+    private fun hasDeviceLocationPermission(): Boolean {
+        val result = LOCATION_PERMISSIONS.associateWith { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        }
+        Log.d(LOCATION_LOG_TAG, "Permission state: $result")
+        return result.values.any { granted -> granted }
+    }
+
+    /**
+     * Получает реальное местоположение устройства и переносит карту к найденной точке.
+     *
+     * Каждый новый вызов отменяет предыдущий незавершённый запрос. Если активна фиктивная точка,
+     * LocationManager возвращает координаты, которые видят другие приложения, и карта переходит к ним.
+     */
+    @Suppress("MissingPermission", "DEPRECATION")
+    private fun showDeviceLocation()
+    {
+        val requestId = ++deviceLocationRequestId
+        activeDeviceLocationCancellation?.cancel()
+        activeDeviceLocationCancellation = null
+        Log.d(LOCATION_LOG_TAG, "Starting device location lookup requestId=$requestId")
+
+        if (!hasDeviceLocationPermission()) {
+            Log.d(LOCATION_LOG_TAG, "Permission disappeared before lookup; launching permission request")
+            deviceLocationPermissionLauncher.launch(LOCATION_PERMISSIONS)
+            return
+        }
+
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        val providers = enabledLocationProviders(locationManager)
+        Log.d(LOCATION_LOG_TAG, "Enabled providers for lookup requestId=$requestId: $providers")
+        if (providers.isEmpty()) {
+            Log.d(LOCATION_LOG_TAG, "No enabled providers; opening location settings")
+            openDeviceLocationSettings()
+            return
+        }
+
+        showDeviceLocationProgress()
+        val cachedLocation = latestKnownLocation(locationManager)
+        Log.d(LOCATION_LOG_TAG, "Latest usable cached location requestId=$requestId: ${cachedLocation.logString()}")
+        if (cachedLocation != null) {
+            showDeviceLocation(cachedLocation)
+        }
+
+        requestDeviceLocation(locationManager, providers, cachedLocation != null, requestId)
+    }
+
+    /**
+     * Открывает системный экран включения геолокации устройства.
+     *
+     * Android не разрешает приложению включать геолокацию напрямую. После возврата из системного
+     * экрана приложение повторяет запрос текущей точки без дополнительного нажатия на кнопку.
+     */
+    private fun openDeviceLocationSettings() {
+        findDeviceLocationAfterSettings = true
+        try {
+            Log.d(LOCATION_LOG_TAG, "Launching system location settings")
+            deviceLocationSettingsLauncher.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        } catch (error: Exception) {
+            Log.w(LOCATION_LOG_TAG, "Unable to open system location settings", error)
+            findDeviceLocationAfterSettings = false
+            Toast.makeText(
+                this,
+                R.string.current_location_settings_unavailable,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    /**
+     * Запрашивает текущую точку по списку включённых provider'ов.
+     *
+     * @param locationManager системный менеджер местоположения.
+     * @param providers включённые provider'ы, разрешённые текущим runtime-доступом.
+     * @param hasShownCachedLocation `true`, если на карте уже показана последняя известная точка.
+     * @param requestId идентификатор актуального пользовательского запроса.
+     */
+    @Suppress("MissingPermission", "DEPRECATION")
+    private fun requestDeviceLocation(
+        locationManager: LocationManager,
+        providers: List<String>,
+        hasShownCachedLocation: Boolean,
+        requestId: Long
+    ) {
+        if (requestId != deviceLocationRequestId) {
+            Log.d(LOCATION_LOG_TAG, "Ignoring stale requestId=$requestId; active=$deviceLocationRequestId")
+            return
+        }
+
+        val provider = providers.firstOrNull()
+        if (provider == null) {
+            activeDeviceLocationCancellation = null
+            activeDeviceLocationListener = null
+            activeDeviceLocationManager = null
+            Log.d(
+                LOCATION_LOG_TAG,
+                "No providers left requestId=$requestId; hasShownCachedLocation=$hasShownCachedLocation"
+            )
+            hideDeviceLocationProgress()
+            if (!hasShownCachedLocation) {
+                Toast.makeText(this, R.string.current_location_unavailable, Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        Log.d(LOCATION_LOG_TAG, "Requesting current location requestId=$requestId provider=$provider")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val cancellationSignal = CancellationSignal()
+            var finished = false
+            activeDeviceLocationCancellation = cancellationSignal
+            mainHandler.postDelayed({
+                if (!finished && requestId == deviceLocationRequestId && activeDeviceLocationCancellation == cancellationSignal) {
+                    finished = true
+                    Log.d(LOCATION_LOG_TAG, "Current location timeout requestId=$requestId provider=$provider")
+                    activeDeviceLocationCancellation = null
+                    cancellationSignal.cancel()
+                    requestDeviceLocation(locationManager, providers.drop(1), hasShownCachedLocation, requestId)
+                }
+            }, DEVICE_LOCATION_TIMEOUT_MS)
+            locationManager.getCurrentLocation(provider, cancellationSignal, mainExecutor) { location ->
+                if (finished) {
+                    Log.d(LOCATION_LOG_TAG, "Ignoring completed current location result requestId=$requestId provider=$provider")
+                    return@getCurrentLocation
+                }
+                finished = true
+                if (requestId != deviceLocationRequestId) {
+                    Log.d(LOCATION_LOG_TAG, "Ignoring stale current location result requestId=$requestId provider=$provider")
+                    return@getCurrentLocation
+                }
+                if (activeDeviceLocationCancellation == cancellationSignal) {
+                    activeDeviceLocationCancellation = null
+                }
+                activeDeviceLocationListener = null
+                activeDeviceLocationManager = null
+                Log.d(LOCATION_LOG_TAG, "Current location result requestId=$requestId provider=$provider: ${location.logString()}")
+                if (location != null && isUsableDeviceLocation(location)) {
+                    showDeviceLocation(location)
+                } else {
+                    Log.d(LOCATION_LOG_TAG, "Provider=$provider result rejected requestId=$requestId; trying next provider")
+                    requestDeviceLocation(locationManager, providers.drop(1), hasShownCachedLocation, requestId)
+                }
+            }
+            return
+        }
+
+        var delivered = false
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                if (requestId != deviceLocationRequestId) {
+                    Log.d(LOCATION_LOG_TAG, "Ignoring stale single update result requestId=$requestId provider=$provider")
+                    locationManager.removeUpdates(this)
+                    if (activeDeviceLocationListener == this) {
+                        activeDeviceLocationListener = null
+                        activeDeviceLocationManager = null
+                    }
+                    return
+                }
+                delivered = true
+                locationManager.removeUpdates(this)
+                if (activeDeviceLocationListener == this) {
+                    activeDeviceLocationListener = null
+                    activeDeviceLocationManager = null
+                }
+                Log.d(LOCATION_LOG_TAG, "Single update result requestId=$requestId provider=$provider: ${location.logString()}")
+                if (isUsableDeviceLocation(location)) {
+                    showDeviceLocation(location)
+                } else {
+                    Log.d(LOCATION_LOG_TAG, "Provider=$provider result rejected requestId=$requestId; trying next provider")
+                    requestDeviceLocation(locationManager, providers.drop(1), hasShownCachedLocation, requestId)
+                }
+            }
+        }
+        activeDeviceLocationManager = locationManager
+        activeDeviceLocationListener = listener
+        mainHandler.postDelayed({
+            if (!delivered && requestId == deviceLocationRequestId && activeDeviceLocationListener == listener) {
+                Log.d(LOCATION_LOG_TAG, "Single update timeout requestId=$requestId provider=$provider")
+                locationManager.removeUpdates(listener)
+                activeDeviceLocationListener = null
+                activeDeviceLocationManager = null
+                requestDeviceLocation(locationManager, providers.drop(1), hasShownCachedLocation, requestId)
+            }
+        }, DEVICE_LOCATION_TIMEOUT_MS)
+        locationManager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+    }
+
+    /**
+     * Возвращает включённые provider'ы, подходящие для одноразового запроса текущей точки.
+     *
+     * Fused и network provider проверяются перед GPS, чтобы кнопка быстрее реагировала в помещении
+     * и после остановки фиктивных координат. GPS используется только при точном доступе.
+     *
+     * @param locationManager системный менеджер местоположения.
+     * @return список provider'ов, доступных для запроса координат.
+     */
+    private fun enabledLocationProviders(locationManager: LocationManager): List<String> {
+        val fineLocationGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val fusedEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            locationManager.isProviderEnabled(LocationManager.FUSED_PROVIDER)
+        val gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        val providers = mutableListOf<String>()
+
+        Log.d(
+            LOCATION_LOG_TAG,
+            "Provider state: fused=$fusedEnabled gps=$gpsEnabled network=$networkEnabled fine=$fineLocationGranted"
+        )
+
+        if (fusedEnabled) {
+            providers += LocationManager.FUSED_PROVIDER
+        }
+        if (networkEnabled) {
+            providers += LocationManager.NETWORK_PROVIDER
+        }
+        if (fineLocationGranted && gpsEnabled) {
+            providers += LocationManager.GPS_PROVIDER
+        }
+
+        return providers
+    }
+
+    /**
+     * Возвращает самое свежее сохранённое системой местоположение, пригодное для перехода камеры.
+     *
+     * Последняя выбранная fake-точка не используется для кнопки перехода к текущей точке, потому
+     * что после остановки фиктивного GPS система может ещё хранить её как последнюю координату.
+     *
+     * @param locationManager системный менеджер местоположения.
+     * @return последняя пригодная точка или `null`, если система не хранит координаты.
+     */
+    @Suppress("MissingPermission")
+    private fun latestKnownLocation(locationManager: LocationManager): Location? {
+        return deviceLocationProvidersForCache()
+            .mapNotNull { provider ->
+                val location = locationManager.getLastKnownLocation(provider)
+                Log.d(LOCATION_LOG_TAG, "Cached location provider=$provider: ${location.logString()}")
+                location
+            }
+            .filter(::isUsableDeviceLocation)
+            .maxByOrNull { location -> location.time }
+    }
+
+    /**
+     * Возвращает provider'ы, из которых можно читать сохранённую системную координату.
+     *
+     * @return список provider'ов с fused provider на Android 12 и новее.
+     */
+    private fun deviceLocationProvidersForCache(): List<String> {
+        return buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(LocationManager.FUSED_PROVIDER)
+            }
+            add(LocationManager.GPS_PROVIDER)
+            add(LocationManager.NETWORK_PROVIDER)
+        }
+    }
+
+    /**
+     * Проверяет, можно ли использовать координату для перехода к реальному местоположению.
+     *
+     * При активном Fake GPS используется координата, которую LocationManager отдаёт другим
+     * приложениям. Без активного Fake GPS отбрасывается только последняя опубликованная fake-точка,
+     * если система ещё хранит её в кэше после остановки сервиса.
+     *
+     * @param location координата, которую вернул LocationManager.
+     * @return `true`, если координату можно использовать для перехода камеры.
+     */
+    private fun isUsableDeviceLocation(location: Location): Boolean {
+        val fakePoint = Location("fake_point").apply {
+            latitude = MockLocationStore.latitude
+            longitude = MockLocationStore.longitude
+        }
+        val distanceToFake = location.distanceTo(fakePoint)
+        val usable = MockLocationStore.running || distanceToFake > 25f
+        Log.d(
+            LOCATION_LOG_TAG,
+            "Usability check: usable=$usable mockRunning=${MockLocationStore.running} " +
+                "distanceToFake=${"%.1f".format(distanceToFake)}m location=${location.logString()}"
+        )
+        return usable
+    }
+
+    /**
+     * Показывает отменяемый диалог ожидания координат от системного LocationManager.
+     *
+     * Диалог можно закрыть кнопкой отмены или нажатием вне окна. В обоих случаях активный запрос
+     * координат отменяется, а поздний результат LocationManager игнорируется.
+     */
+    private fun showDeviceLocationProgress() {
+        if (deviceLocationProgressDialog?.isShowing == true || isFinishing || isDestroyed) {
+            return
+        }
+        val contentView = layoutInflater.inflate(R.layout.dialog_device_location_progress, null)
+        deviceLocationProgressDialog = AlertDialog.Builder(this)
+            .setView(contentView)
+            .setNegativeButton(R.string.cancel) { _, _ -> cancelDeviceLocationLookup() }
+            .create()
+            .apply {
+                setCanceledOnTouchOutside(true)
+                setOnCancelListener { cancelDeviceLocationLookup() }
+                setOnDismissListener { deviceLocationProgressDialog = null }
+                show()
+            }
+    }
+
+    /** Отменяет активное ожидание координат и запрещает позднему результату менять карту. */
+    private fun cancelDeviceLocationLookup() {
+        val cancelledRequestId = ++deviceLocationRequestId
+        activeDeviceLocationCancellation?.cancel()
+        activeDeviceLocationCancellation = null
+        activeDeviceLocationListener?.let { listener ->
+            activeDeviceLocationManager?.removeUpdates(listener)
+        }
+        activeDeviceLocationListener = null
+        activeDeviceLocationManager = null
+        Log.d(LOCATION_LOG_TAG, "Device location lookup cancelled requestId=$cancelledRequestId")
+        hideDeviceLocationProgress()
+    }
+
+    /** Закрывает диалог ожидания координат, если он отображается. */
+    private fun hideDeviceLocationProgress() {
+        deviceLocationProgressDialog?.dismiss()
+        deviceLocationProgressDialog = null
+    }
+
+    /**
+     * Переносит карту к району реального местоположения устройства без добавления маркера.
+     *
+     * Кнопка навигации используется только для перемещения камеры. Выбранная mock-точка и её
+     * маркер остаются единственными объектами, которыми пользователь управляет на карте.
+     *
+     * @param location реальное местоположение устройства.
+     */
+    private fun showDeviceLocation(location: Location)
+    {
+        val map = mapBinding?.map
+        if (map == null) {
+            Log.d(LOCATION_LOG_TAG, "Map is not ready; cannot move camera to ${location.logString()}")
+            hideDeviceLocationProgress()
+            return
+        }
+        hideDeviceLocationProgress()
+        val point = GeoPoint(location.latitude, location.longitude)
+        Log.d(LOCATION_LOG_TAG, "Moving map camera to ${location.logString()} zoom=$DEVICE_LOCATION_ZOOM")
+        map.controller.setZoom(DEVICE_LOCATION_ZOOM)
+        map.controller.animateTo(point)
+        map.invalidate()
+    }
+
+    /**
+     * Форматирует координату для компактной диагностики в Logcat.
+     *
+     * @return строка с provider, координатами, точностью, временем и mock-флагом или `null`.
+     */
+    @Suppress("DEPRECATION")
+    private fun Location?.logString(): String {
+        if (this == null) return "null"
+        val mock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            isMock
+        } else {
+            isFromMockProvider
+        }
+        return "provider=$provider lat=${"%.6f".format(latitude)} lon=${"%.6f".format(longitude)} " +
+            "accuracy=${"%.1f".format(accuracy)}m time=$time elapsed=$elapsedRealtimeNanos mock=$mock"
+    }
+
+    /**
      * Показывает меню выбора источника карты возле кнопки слоёв.
      *
      * Активный источник отмечается стандартной радиокнопкой. Выбор сохраняется сразу и
@@ -442,7 +845,7 @@ class MainActivity : ThemedActivity()
      * @param binding привязка активного экрана карты.
      */
     private fun showMapLayersMenu(binding: ActivityMapBinding) {
-        PopupMenu(this, binding.topBar.mapLayersButton).apply {
+        PopupMenu(this, binding.mapLayersButton).apply {
             menuInflater.inflate(R.menu.map_layers, menu)
             menu.findItem(mapProvider.menuItemId()).isChecked = true
             setOnMenuItemClickListener { item ->
@@ -475,7 +878,7 @@ class MainActivity : ThemedActivity()
     }
 
     /**
-     * Устанавливает сохранённый источник тайлов и его обязательную атрибуцию.
+     * Устанавливает сохранённый источник тайлов.
      *
      * Цветовая тема приложения намеренно не участвует в выборе: карту меняет только меню слоёв.
      *
@@ -487,16 +890,11 @@ class MainActivity : ThemedActivity()
             MapProvider.OpenStreetMap -> TileSourceFactory.MAPNIK
             MapProvider.EsriDarkGray -> ESRI_DARK_TILE_SOURCE
         }
-        val attribution = when (mapProvider) {
-            MapProvider.OpenStreetMap -> R.string.map_attribution_osm
-            MapProvider.EsriDarkGray -> R.string.map_attribution_esri
-        }
 
         map.setTileSource(tileSource)
         map.overlayManager.tilesOverlay.setColorFilter(null)
         map.overlayManager.tilesOverlay.setLoadingBackgroundColor(Color.rgb(216, 208, 208))
         map.overlayManager.tilesOverlay.setLoadingLineColor(Color.rgb(200, 192, 192))
-        binding.mapAttribution.setText(attribution)
         map.invalidate()
     }
 
@@ -878,33 +1276,6 @@ class MainActivity : ThemedActivity()
     }
 
     /**
-     * Приостанавливает карту и освобождает её привязку перед сменой экрана.
-     *
-     * После вызова ссылки на карту и маркер обнуляются, поэтому экран карты должен быть создан
-     * заново при следующем переходе к нему.
-     */
-    private fun detachMap() {
-        mapBinding?.map?.onPause()
-        mapBinding?.map?.onDetach()
-        mapBinding = null
-        pin = null
-    }
-
-    /**
-     * Проверяет наличие хотя бы одного разрешения на доступ к местоположению.
-     *
-     * Для открытия карты достаточно точного или приблизительного разрешения, поэтому проверяются
-     * оба разрешения из [LOCATION_PERMISSIONS].
-     *
-     * @return `true`, если выдано точное или приблизительное разрешение.
-     */
-    private fun hasLocationPermission(): Boolean {
-        return LOCATION_PERMISSIONS.any { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    /**
      * Проверяет, выбрано ли это приложение системным приложением для фиктивных местоположений.
      *
      * Проверка выполняется через AppOpsManager и учитывает различия API до и после Android 10.
@@ -915,27 +1286,57 @@ class MainActivity : ThemedActivity()
         return MockLocationEngine.isSelectedAsMockApp(this)
     }
 
-    /** Открывает страницу настроек приложения, где пользователь может управлять разрешениями. */
-    private fun openAppSettings() {
-        startActivity(
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-            }
-        )
+    /**
+     * Проверяет, включён ли системный раздел параметров разработчика.
+     *
+     * Результат используется только для текста инструкции. Если прошивка запрещает чтение
+     * глобальной настройки, диалог показывает сценарий выбора mock-приложения.
+     *
+     * @return `true`, если Android сообщает, что параметры разработчика включены.
+     */
+    private fun isDeveloperSettingsEnabled(): Boolean {
+        return try {
+            Settings.Global.getInt(contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
+        } catch (error: Exception) {
+            Log.w(LOCATION_LOG_TAG, "Unable to read developer settings state", error)
+            true
+        }
     }
 
     /**
-     * Открывает настройки разработчика для выбора приложения фиктивных местоположений.
+     * Открывает системные настройки, где выбирается приложение фиктивных местоположений.
      *
-     * Если устройство не поддерживает соответствующий Intent или режим разработчика отключён,
-     * пользователю показывается сообщение об ошибке.
+     * На Nubia/RedMagic прямой Intent параметров разработчика ведёт в системный экран-заглушку,
+     * поэтому для этих устройств сразу открывается общий экран настроек.
      */
     private fun openDeveloperSettings() {
-        try {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
-        } catch (_: Exception) {
-            Toast.makeText(this, R.string.mock_app_open_failed, Toast.LENGTH_LONG).show()
+        val intents = if (isNubiaDevice()) {
+            listOf(Intent(Settings.ACTION_SETTINGS))
+        } else {
+            listOf(
+                Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+                Intent("com.android.settings.APPLICATION_DEVELOPMENT_SETTINGS"),
+                Intent(Settings.ACTION_SETTINGS)
+            )
         }
+
+        for (intent in intents) {
+            try {
+                Log.d(LOCATION_LOG_TAG, "Opening settings action=${intent.action}")
+                startActivity(intent)
+                return
+            } catch (error: Exception) {
+                Log.w(LOCATION_LOG_TAG, "Unable to open settings action=${intent.action}", error)
+            }
+        }
+
+        Toast.makeText(this, R.string.mock_app_open_failed, Toast.LENGTH_LONG).show()
+    }
+
+    /** Возвращает `true`, если устройство использует прошивку Nubia или RedMagic. */
+    private fun isNubiaDevice(): Boolean {
+        return Build.MANUFACTURER.equals("nubia", ignoreCase = true) ||
+            Build.BRAND.equals("nubia", ignoreCase = true)
     }
 
     /**
@@ -965,15 +1366,25 @@ class MainActivity : ThemedActivity()
     }
 
     /**
-     * Преобразует drawable значка точки в BitmapDrawable, совместимый с osmdroid Marker.
+     * Возвращает растровый значок выбранной mock-точки для osmdroid Marker.
      *
-     * Размер Bitmap берётся из исходного drawable и принудительно ограничивается минимумом `1x1`,
-     * чтобы избежать ошибки при отсутствии у drawable заданных габаритов.
+     * Значок подготовлен из исходного изображения приложения и хранится как PNG-ресурс
+     * подходящего размера, чтобы маркер не перекрывал карту.
      *
      * @return растровый значок маркера.
      */
     private fun pinIcon(): BitmapDrawable {
-        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_pin)!!
+        return drawableIcon(R.drawable.ic_mock_location_pin)
+    }
+
+    /**
+     * Преобразует drawable-ресурс в BitmapDrawable с исходными размерами.
+     *
+     * @param resId идентификатор drawable-ресурса.
+     * @return растровая версия drawable-ресурса.
+     */
+    private fun drawableIcon(resId: Int): BitmapDrawable {
+        val drawable = ContextCompat.getDrawable(this, resId)!!
         val width = drawable.intrinsicWidth.coerceAtLeast(1)
         val height = drawable.intrinsicHeight.coerceAtLeast(1)
         val bitmap = createBitmap(width, height)

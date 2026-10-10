@@ -12,8 +12,8 @@ android {
         applicationId = "fuck.system.fakegps"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 33
+        versionName = "1.0.32"
     }
 
     buildTypes {
@@ -36,4 +36,5 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.osmdroid.android)
+    implementation(libs.neoui)
 }

@@ -1,13 +1,15 @@
 [versions]
-agp = "9.3.3"
+agp = "9.3.2"
 appcompat = "1.8.0"
 coreKtx = "1.19.1"
 osmdroid = "6.1.20"
+neoui = "1.0.10"
 
 [libraries]
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
+neoui = { group = "com.rokkystudio.sharedapp", name = "neoui", version.ref = "neoui" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
